@@ -355,13 +355,6 @@ module.exports = (file, api, options) => {
     autobindFunctions,
     comments
   ) => {
-    console.log([].concat(
-      createConstructor(
-        getInitialState,
-        autobindFunctions
-      ),
-      properties
-    ));
     return withComments(j.classDeclaration(
       name ? j.identifier(name) : null,
       j.classBody(
