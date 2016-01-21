@@ -389,7 +389,7 @@ module.exports = (file, api, options) => {
                   )
                 ),
               ],
-              // autobindFunctions.map(createBindAssignment),
+              autobindFunctions.map(createBindAssignment),
               inlineGetInitialState(getInitialState)
             )
           )
