@@ -12,6 +12,7 @@
 
 module.exports = (file, api, options) => {
   const j = api.jscodeshift;
+  const util = require('util');
 
   // Coursera specific sort order, taken from our eslintrc
   const COMPONENT_METHOD_ORDER = [
@@ -289,12 +290,28 @@ module.exports = (file, api, options) => {
 
   // ---------------------------------------------------------------------------
   // Boom!
-  const createMethodDefinition = fn =>
-    withComments(j.methodDefinition(
+  const createMethodDefinition = fn => {
+    return withComments(j.methodDefinition(
       'method',
       fn.key,
       fn.value
     ), fn);
+  };
+
+  const createArrowFunctionDefinition = fn => {
+    var x = j.classProperty(
+      fn.key,
+      j.arrowFunctionExpression(
+        fn.value.params,
+        fn.value.body,
+        true
+      ),
+      null,
+      false
+    );
+
+    return x;
+  };
 
   const createBindAssignment = name =>
     j.expressionStatement(
@@ -408,7 +425,7 @@ module.exports = (file, api, options) => {
                   )
                 ),
               ],
-              autobindFunctions.map(createBindAssignment),
+              // autobindFunctions.map(createBindAssignment),
               inlineGetInitialState(getInitialState)
             )
           )
@@ -429,7 +446,9 @@ module.exports = (file, api, options) => {
     const gisRequiresThis = j(getInitialState)
       .find(j.ThisExpression)
       .paths()
-      .length > 0
+      .length > 0;
+
+    const useFatArrowBind = true;
 
     return withComments(j.classDeclaration(
       name ? j.identifier(name) : null,
@@ -437,7 +456,7 @@ module.exports = (file, api, options) => {
         [].concat(
           createConstructor(
             gisRequiresThis ? getInitialState : undefined,
-            autobindFunctions
+            useFatArrowBind ? [] : autobindFunctions
           ),
           properties,
           gisRequiresThis ? [] : inlineClassPropertyGetInitialState(getInitialState)
@@ -451,8 +470,7 @@ module.exports = (file, api, options) => {
           } else {
             return 0;
           }
-        })
-      ),
+        })      ),
       j.memberExpression(
         j.identifier('React'),
         j.identifier('Component'),
@@ -562,12 +580,20 @@ module.exports = (file, api, options) => {
     //  (type == 'exportDefault') ? createStaticClassProperties(statics) : [];
     const properties = createStaticClassProperties(statics);
 
+    const autoboundPropertyFunctions = functions
+      .filter(fn => autobindFunctions.indexOf(fn.key.name) > -1)
+      .map(createArrowFunctionDefinition);
+
+    const otherProperties = functions
+        .filter(fn => autobindFunctions.indexOf(fn.key.name) === -1)
+        .map(createMethodDefinition);
+
     path.replaceWith(
       createESClass(
         name,
         properties.concat(
-          functions
-            .map(createMethodDefinition)
+          autoboundPropertyFunctions,
+          otherProperties
         ),
         getInitialState,
         autobindFunctions,
@@ -575,28 +601,28 @@ module.exports = (file, api, options) => {
       )
     );
 
+    /*
+    // WE DON'T DO THIS AT COURSERA.
     if (type == 'moduleExports' || type == 'var') {
       const staticAssignments = createStaticAssignmentExpressions(
         staticName,
         statics
       );
-      /*
       if (type == 'moduleExports') {
         root.get().value.program.body.push(...staticAssignments);
       } else {
         path.insertAfter(staticAssignments.reverse());
       }
-      */
     }
+    */
 
     // Handle auto bind functions separately */
     path
       .find(j.ClassBody)
       .find(j.FunctionExpression)
       .forEach(p => {
-        if (autobindFunctions.indexOf(p.parent.value.key.name) > 0) {
+        if (autobindFunctions.indexOf(p.parent.value.key.name) > -1) {
           console.log(p.parent.value.key.name);
-          // DO SOMETHING
         }
       });
   };
