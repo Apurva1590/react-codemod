@@ -360,6 +360,25 @@ module.exports = (file, api, options) => {
     });
   };
 
+  const inlineClassPropertyGetInitialState = getInitialState => {
+    if (!getInitialState) {
+      return [];
+    }
+
+    return getInitialState.value.body.body.map(statement => {
+      if (statement.type === 'ReturnStatement') {
+        return j.classProperty(
+          j.identifier('state'),
+          statement.argument,
+          null,
+          false
+        );
+      }
+
+      return statement;
+    });
+  };
+
   const createConstructorArgs = (hasPropsAccess) => {
     return [j.identifier('props'), j.identifier('context')];
   };
@@ -405,15 +424,23 @@ module.exports = (file, api, options) => {
     autobindFunctions,
     comments
   ) => {
+    // If there is a this. expression in getInitialState, stick it in
+    // constructor(). Otherwise use a state property.
+    const gisRequiresThis = j(getInitialState)
+      .find(j.ThisExpression)
+      .paths()
+      .length > 0
+
     return withComments(j.classDeclaration(
       name ? j.identifier(name) : null,
       j.classBody(
         [].concat(
           createConstructor(
-            getInitialState,
+            gisRequiresThis ? getInitialState : undefined,
             autobindFunctions
           ),
-          properties
+          properties,
+          gisRequiresThis ? [] : inlineClassPropertyGetInitialState(getInitialState)
         ).sort((a, b) => {
           const aIndex = findOrderIndex(a.key.name);
           const bIndex = findOrderIndex(b.key.name);
@@ -562,17 +589,16 @@ module.exports = (file, api, options) => {
       */
     }
 
-    /* Handle auto bind functions separately */
-    /*
-    TODO (lewis): Finish this
+    // Handle auto bind functions separately */
     path
+      .find(j.ClassBody)
       .find(j.FunctionExpression)
       .forEach(p => {
         if (autobindFunctions.indexOf(p.parent.value.key.name) > 0) {
+          console.log(p.parent.value.key.name);
           // DO SOMETHING
         }
       });
-    */
   };
 
   if (
