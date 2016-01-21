@@ -13,6 +13,56 @@
 module.exports = (file, api, options) => {
   const j = api.jscodeshift;
 
+  // Coursera specific sort order, taken from our eslintrc
+  const COMPONENT_METHOD_ORDER = [
+    'displayName',
+    'propTypes',
+    'contextTypes',
+    'childContextTypes',
+    'mixins',
+    'statics',
+    'defaultProps',
+    'getDefaultProps',
+    'getStateFromStores',
+    'state',
+    'getInitialState',
+    'getChildContext',
+    'constructor',
+    'componentWillMount',
+    'componentDidMount',
+    'componentWillReceiveProps',
+    'shouldComponentUpdate',
+    'componentWillUpdate',
+    'componentDidUpdate',
+    'componentWillUnmount',
+    '/^handle.+$/',
+    '/^on.+$/',
+    '/^get.+$/',
+    'everything-else',
+    '/^render.+$/',
+    'render',
+  ].map(function(x) {
+    // Remove /, so we can pass into new RegExp()
+    return x.replace(/\//g, '');
+  });
+
+  const findOrderIndex = (methodName) => {
+    let index = COMPONENT_METHOD_ORDER.findIndex(regexString => {
+      if (new RegExp(regexString).test(methodName)) {
+        return true;
+      }
+    });
+
+    if (methodName === 'render' || new RegExp(/^render.+$/).test(methodName)) {
+      index += 1000;
+    }
+
+    // Handle cases where not found by assigning index between render and other found things.
+    index = index === -1 ? 500 : index;
+
+    return index;
+  };
+
   require('./utils/array-polyfills');
   const ReactUtils = require('./utils/ReactUtils')(j);
 
@@ -339,7 +389,7 @@ module.exports = (file, api, options) => {
                   )
                 ),
               ],
-              autobindFunctions.map(createBindAssignment),
+              // autobindFunctions.map(createBindAssignment),
               inlineGetInitialState(getInitialState)
             )
           )
@@ -364,7 +414,17 @@ module.exports = (file, api, options) => {
             autobindFunctions
           ),
           properties
-        )
+        ).sort((a, b) => {
+          const aIndex = findOrderIndex(a.key.name);
+          const bIndex = findOrderIndex(b.key.name);
+          if (aIndex > bIndex) {
+            return 1;
+          } else if (aIndex < bIndex) {
+            return -1;
+          } else {
+            return 0;
+          }
+        })
       ),
       j.memberExpression(
         j.identifier('React'),
@@ -372,7 +432,7 @@ module.exports = (file, api, options) => {
         false
       )
     ), {comments});
-  }
+  };
 
   const createStaticAssignment = (name, staticProperty) =>
     withComments(j.expressionStatement(
@@ -478,7 +538,10 @@ module.exports = (file, api, options) => {
     path.replaceWith(
       createESClass(
         name,
-        properties.concat(functions.map(createMethodDefinition)),
+        properties.concat(
+          functions
+            .map(createMethodDefinition)
+        ),
         getInitialState,
         autobindFunctions,
         comments
@@ -497,8 +560,19 @@ module.exports = (file, api, options) => {
         path.insertAfter(staticAssignments.reverse());
       }
       */
-      path.insertAfter(staticAssignments.reverse());
     }
+
+    /* Handle auto bind functions separately */
+    /*
+    TODO (lewis): Finish this
+    path
+      .find(j.FunctionExpression)
+      .forEach(p => {
+        if (autobindFunctions.indexOf(p.parent.value.key.name) > 0) {
+          // DO SOMETHING
+        }
+      });
+    */
   };
 
   if (
