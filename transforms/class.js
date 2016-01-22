@@ -443,10 +443,10 @@ module.exports = (file, api, options) => {
   ) => {
     // If there is a this. expression in getInitialState, stick it in
     // constructor(). Otherwise use a state property.
-    const gisRequiresThis = j(getInitialState)
+    const gisRequiresThis = getInitialState ? j(getInitialState)
       .find(j.ThisExpression)
       .paths()
-      .length > 0;
+      .length > 0 : false;
 
     const useFatArrowBind = true;
 
@@ -566,8 +566,7 @@ module.exports = (file, api, options) => {
     const autobindFunctions = collectAutoBindFunctions(functions, classPath);
     const getInitialState = findGetInitialState(specPath);
 
-    const staticName =
-      name ? j.identifier(name) : createModuleExportsMemberExpression();
+    // const staticName = name ? j.identifier(name) : createModuleExportsMemberExpression();
 
     var path;
     if (type == 'moduleExports' || type == 'exportDefault') {
@@ -601,6 +600,18 @@ module.exports = (file, api, options) => {
       )
     );
 
+    // Remove semi-colons suffixed on class properties since we don't
+    // match spec yet. We can add these in later on.
+    path.find(j.ClassProperty)
+      .replaceWith(path => {
+        var source = j(path).toSource();
+        if (source[source.length - 1] === ';') {
+          return source.substring(0, source.length -1);
+        } else {
+          return source;
+        }
+      });
+
     /*
     // WE DON'T DO THIS AT COURSERA.
     if (type == 'moduleExports' || type == 'var') {
@@ -615,16 +626,6 @@ module.exports = (file, api, options) => {
       }
     }
     */
-
-    // Handle auto bind functions separately */
-    path
-      .find(j.ClassBody)
-      .find(j.FunctionExpression)
-      .forEach(p => {
-        if (autobindFunctions.indexOf(p.parent.value.key.name) > -1) {
-          console.log(p.parent.value.key.name);
-        }
-      });
   };
 
   if (
