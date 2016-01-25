@@ -12,6 +12,57 @@
 
 module.exports = (file, api, options) => {
   const j = api.jscodeshift;
+  const util = require('util');
+
+  // Coursera specific sort order, taken from our eslintrc
+  const COMPONENT_METHOD_ORDER = [
+    'displayName',
+    'propTypes',
+    'contextTypes',
+    'childContextTypes',
+    'mixins',
+    'statics',
+    'defaultProps',
+    'getDefaultProps',
+    'getStateFromStores',
+    'state',
+    'getInitialState',
+    'getChildContext',
+    'constructor',
+    'componentWillMount',
+    'componentDidMount',
+    'componentWillReceiveProps',
+    'shouldComponentUpdate',
+    'componentWillUpdate',
+    'componentDidUpdate',
+    'componentWillUnmount',
+    '/^handle.+$/',
+    '/^on.+$/',
+    '/^get.+$/',
+    'everything-else',
+    '/^render.+$/',
+    'render',
+  ].map(function(x) {
+    // Remove /, so we can pass into new RegExp()
+    return x.replace(/\//g, '');
+  });
+
+  const findOrderIndex = (methodName) => {
+    let index = COMPONENT_METHOD_ORDER.findIndex(regexString => {
+      if (new RegExp(regexString).test(methodName)) {
+        return true;
+      }
+    });
+
+    if (methodName === 'render' || new RegExp(/^render.+$/).test(methodName)) {
+      index += 1000;
+    }
+
+    // Handle cases where not found by assigning index between render and other found things.
+    index = index === -1 ? 500 : index;
+
+    return index;
+  };
 
   require('./utils/array-polyfills');
   const ReactUtils = require('./utils/ReactUtils')(j);
@@ -239,12 +290,28 @@ module.exports = (file, api, options) => {
 
   // ---------------------------------------------------------------------------
   // Boom!
-  const createMethodDefinition = fn =>
-    withComments(j.methodDefinition(
+  const createMethodDefinition = fn => {
+    return withComments(j.methodDefinition(
       'method',
       fn.key,
       fn.value
     ), fn);
+  };
+
+  const createArrowFunctionDefinition = fn => {
+    var x = j.classProperty(
+      fn.key,
+      j.arrowFunctionExpression(
+        fn.value.params,
+        fn.value.body,
+        true
+      ),
+      null,
+      false
+    );
+
+    return x;
+  };
 
   const createBindAssignment = name =>
     j.expressionStatement(
@@ -310,6 +377,25 @@ module.exports = (file, api, options) => {
     });
   };
 
+  const inlineClassPropertyGetInitialState = getInitialState => {
+    if (!getInitialState) {
+      return [];
+    }
+
+    return getInitialState.value.body.body.map(statement => {
+      if (statement.type === 'ReturnStatement') {
+        return j.classProperty(
+          j.identifier('state'),
+          statement.argument,
+          null,
+          false
+        );
+      }
+
+      return statement;
+    });
+  };
+
   const createConstructorArgs = (hasPropsAccess) => {
     return [j.identifier('props'), j.identifier('context')];
   };
@@ -339,7 +425,7 @@ module.exports = (file, api, options) => {
                   )
                 ),
               ],
-              autobindFunctions.map(createBindAssignment),
+              // autobindFunctions.map(createBindAssignment),
               inlineGetInitialState(getInitialState)
             )
           )
@@ -354,24 +440,44 @@ module.exports = (file, api, options) => {
     getInitialState,
     autobindFunctions,
     comments
-  ) =>
-    withComments(j.classDeclaration(
+  ) => {
+    // If there is a this. expression in getInitialState, stick it in
+    // constructor(). Otherwise use a state property.
+    const gisRequiresThis = getInitialState ? j(getInitialState)
+      .find(j.ThisExpression)
+      .paths()
+      .length > 0 : false;
+
+    const useFatArrowBind = true;
+
+    return withComments(j.classDeclaration(
       name ? j.identifier(name) : null,
       j.classBody(
         [].concat(
           createConstructor(
-            getInitialState,
-            autobindFunctions
+            gisRequiresThis ? getInitialState : undefined,
+            useFatArrowBind ? [] : autobindFunctions
           ),
-          properties
-        )
-      ),
+          properties,
+          gisRequiresThis ? [] : inlineClassPropertyGetInitialState(getInitialState)
+        ).sort((a, b) => {
+          const aIndex = findOrderIndex(a.key.name);
+          const bIndex = findOrderIndex(b.key.name);
+          if (aIndex > bIndex) {
+            return 1;
+          } else if (aIndex < bIndex) {
+            return -1;
+          } else {
+            return 0;
+          }
+        })      ),
       j.memberExpression(
         j.identifier('React'),
         j.identifier('Component'),
         false
       )
     ), {comments});
+  };
 
   const createStaticAssignment = (name, staticProperty) =>
     withComments(j.expressionStatement(
@@ -460,8 +566,7 @@ module.exports = (file, api, options) => {
     const autobindFunctions = collectAutoBindFunctions(functions, classPath);
     const getInitialState = findGetInitialState(specPath);
 
-    const staticName =
-      name ? j.identifier(name) : createModuleExportsMemberExpression();
+    // const staticName = name ? j.identifier(name) : createModuleExportsMemberExpression();
 
     var path;
     if (type == 'moduleExports' || type == 'exportDefault') {
@@ -470,19 +575,45 @@ module.exports = (file, api, options) => {
       path = j(classPath).closest(j.VariableDeclaration);
     }
 
-    const properties =
-      (type == 'exportDefault') ? createStaticClassProperties(statics) : [];
+    // const properties =
+    //  (type == 'exportDefault') ? createStaticClassProperties(statics) : [];
+    const properties = createStaticClassProperties(statics);
+
+    const autoboundPropertyFunctions = functions
+      .filter(fn => autobindFunctions.indexOf(fn.key.name) > -1)
+      .map(createArrowFunctionDefinition);
+
+    const otherProperties = functions
+        .filter(fn => autobindFunctions.indexOf(fn.key.name) === -1)
+        .map(createMethodDefinition);
 
     path.replaceWith(
       createESClass(
         name,
-        properties.concat(functions.map(createMethodDefinition)),
+        properties.concat(
+          autoboundPropertyFunctions,
+          otherProperties
+        ),
         getInitialState,
         autobindFunctions,
         comments
       )
     );
 
+    // Remove semi-colons suffixed on class properties since we don't
+    // match spec yet. We can add these in later on.
+    path.find(j.ClassProperty)
+      .replaceWith(path => {
+        var source = j(path).toSource();
+        if (source[source.length - 1] === ';') {
+          return source.substring(0, source.length -1);
+        } else {
+          return source;
+        }
+      });
+
+    /*
+    // WE DON'T DO THIS AT COURSERA.
     if (type == 'moduleExports' || type == 'var') {
       const staticAssignments = createStaticAssignmentExpressions(
         staticName,
@@ -494,6 +625,7 @@ module.exports = (file, api, options) => {
         path.insertAfter(staticAssignments.reverse());
       }
     }
+    */
   };
 
   if (
