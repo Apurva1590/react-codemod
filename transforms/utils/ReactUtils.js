@@ -42,7 +42,8 @@ module.exports = function(j) {
     hasModule(path, 'React') ||
     hasModule(path, 'react') ||
     hasModule(path, 'react/addons') ||
-    hasModule(path, 'react-with-addons')  // Required for Coursera specific naming conventions.
+    hasModule(path, 'react-with-addons') ||
+    hasModule(path, 'react-native')
   );
 
   // ---------------------------------------------------------------------------
@@ -86,10 +87,43 @@ module.exports = function(j) {
       });
 
   // ---------------------------------------------------------------------------
+  // Finds alias for React.Component if used as named import.
+  const findReactComponentName = path => {
+    const reactImportDeclaration = path
+      .find(j.ImportDeclaration, {
+        type: 'ImportDeclaration',
+        source: {
+          type: 'Literal',
+        },
+      })
+      .filter(importDeclaration => hasReact(path));
+
+    const componentImportSpecifier = reactImportDeclaration
+      .find(j.ImportSpecifier, {
+        type: 'ImportSpecifier',
+        imported: {
+          type: 'Identifier',
+          name: 'Component',
+        },
+      }).at(0);
+
+    const paths = componentImportSpecifier.paths();
+    return paths.length
+      ? paths[0].value.local.name
+      : undefined;
+  };
+
   // Finds all classes that extend React.Component
-  const findReactES6ClassDeclaration = path =>
-    path
-      .find(j.ClassDeclaration, {
+  const findReactES6ClassDeclaration = path => {
+    const componentImport = findReactComponentName(path);
+    const selector = componentImport
+      ? {
+        superClass: {
+          type: 'Identifier',
+          name: componentImport,
+        },
+      }
+      : {
         superClass: {
           type: 'MemberExpression',
           object: {
@@ -101,7 +135,11 @@ module.exports = function(j) {
             name: 'Component',
           },
         },
-      });
+      };
+
+    return path
+     .find(j.ClassDeclaration, selector);
+  };
 
   // ---------------------------------------------------------------------------
   // Checks if the React class has mixins
@@ -132,7 +170,10 @@ module.exports = function(j) {
         return spec;
       }
     }
+    return null;
   };
+
+  const getClassExtendReactSpec = classPath => classPath.value.body;
 
   const createCreateReactClassCallExpression = properties =>
     j.callExpression(
@@ -156,6 +197,7 @@ module.exports = function(j) {
     findReactCreateClassExportDefault,
     getComponentName,
     getReactCreateClassSpec,
+    getClassExtendReactSpec,
     hasMixins,
     hasModule,
     hasReact,

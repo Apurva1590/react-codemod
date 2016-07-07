@@ -13,7 +13,6 @@
 jest.autoMockOff();
 
 const fs = require('fs');
-const jscodeshift = require('jscodeshift');
 const p = require('path');
 
 const read = fileName => fs.readFileSync(
@@ -22,17 +21,24 @@ const read = fileName => fs.readFileSync(
 );
 
 global.test = (transformName, testFileName, options, fakeOptions) => {
-  let path = testFileName + '.js';
-  const source = read(testFileName + '.js');
-  const output = read(testFileName + '.output.js');
-  const transform = require(
-    p.join(global.baseDir, '/transforms/', transformName)
+  console.warn(
+    'react-codemod test() is deprecated. Please use jscodeshift testUtils ' +
+    'instead. See http://dl.vc/jscodeshift-test'
   );
 
-  if (fakeOptions) {
-    if (fakeOptions.path) {
-      path = fakeOptions.path;
-    }
+  const jscodeshift = require('jscodeshift');
+  const source = read(testFileName + '.js');
+  const output = read(testFileName + '.output.js');
+  let path = testFileName + '.js';
+  let transform = require(
+    p.join(global.baseDir, '/transforms/', transformName)
+  );
+  if (transform.default) {
+    transform = transform.default;
+  }
+
+  if (fakeOptions && fakeOptions.path) {
+    path = fakeOptions.path;
   }
 
   expect(

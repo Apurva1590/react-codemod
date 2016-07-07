@@ -10,10 +10,6 @@
 
 'use strict';
 
-describe('findDOMNode', () => {
-
-  it('transforms correctly', () => {
-    test('findDOMNode', 'findDOMNode-test');
-  });
-
-});
+const defineTest = require('jscodeshift/dist/testUtils').defineTest;
+defineTest(__dirname, 'pure-component');
+defineTest(__dirname, 'pure-component', {useArrows: true}, 'pure-component2');

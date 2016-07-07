@@ -6,10 +6,8 @@ function render() {
   return <div/>;
 }
 
-class Pure extends React.Component {
-  render() {
-    return <div className={this.props.foo} />;
-  }
+function Pure(props) {
+  return <div className={props.foo} />;
 }
 
 class Impure extends React.Component {
@@ -18,6 +16,16 @@ class Impure extends React.Component {
   }
   render() {
     return <div className={this.props.foo} />;
+  }
+}
+
+class ImpureWithRef extends React.Component {
+  render() {
+    return (
+      <div>
+        <span ref="spanasaurus" />
+      </div>
+    );
   }
 }
 

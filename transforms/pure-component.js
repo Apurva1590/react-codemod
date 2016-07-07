@@ -1,3 +1,15 @@
+/**
+ * Copyright 2013-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
+'use strict';
+
 module.exports = function(file, api, options) {
   const j = api.jscodeshift;
   const ReactUtils = require('./utils/ReactUtils')(j);
@@ -23,6 +35,16 @@ module.exports = function(file, api, options) {
       .find(j.MethodDefinition)
       .filter(p => !isRenderMethod(p.value))
       .size() === 0;
+
+  const hasRefs = path =>
+    j(path)
+      .find(j.JSXAttribute, {
+        name: {
+          type: 'JSXIdentifier',
+          name: 'ref',
+        },
+      })
+      .size() > 0;
 
   const THIS_PROPS = {
     object: {
@@ -70,7 +92,7 @@ module.exports = function(file, api, options) {
 
   const pureClasses = ReactUtils.findReactES6ClassDeclaration(f)
     .filter(path => {
-      const isPure = onlyHasRenderMethod(path);
+      const isPure = onlyHasRenderMethod(path) && !hasRefs(path);
       if (!isPure && !silenceWarnings) {
         reportSkipped(path);
       }
@@ -97,4 +119,3 @@ module.exports = function(file, api, options) {
 
   return f.toSource(printOptions);
 };
-

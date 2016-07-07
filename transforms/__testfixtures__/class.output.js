@@ -8,64 +8,54 @@ var Image = require('Image.react');
 /*
  * Multiline
  */
-var MyComponent = React.createClass({
-  getInitialState: function() {
-    var x = this.props.foo;
-    return {
+class MyComponent extends React.Component {
+  constructor(props, context) {
+    super(props, context);
+    var x = props.foo;
+
+    this.state = {
       heyoo: 23,
     };
-  },
+  }
 
-  foo: function() {
+  foo() {
     this.setState({heyoo: 24});
-  },
-});
+  }
+}
 
 // Class comment
-var MyComponent2 = React.createClass({
-  getDefaultProps: function() {
-    return {a: 1};
-  },
-  foo: function() {
+class MyComponent2 extends React.Component {
+  constructor(props, context) {
+    super(props, context);
+    this.foo = this.foo.bind(this);
+  }
+
+  foo() {
     pass(this.foo);
     this.forceUpdate();
-  },
-});
+  }
+}
 
-var MyComponent3 = React.createClass({
-  statics: {
-    someThing: 10,
-    foo: function() {},
-  },
-  propTypes: {
-    highlightEntities: React.PropTypes.bool,
-    linkifyEntities: React.PropTypes.bool,
-    text: React.PropTypes.shape({
-      text: React.PropTypes.string,
-      ranges: React.PropTypes.array,
-    }).isRequired,
-  },
+MyComponent2.defaultProps = {a: 1};
 
-  getDefaultProps: function() {
-    foo();
-    return {
-      linkifyEntities: true,
-      highlightEntities: false,
-    };
-  },
+class MyComponent3 extends React.Component {
+  constructor(props, context) {
+    super(props, context);
+    this._renderRange = this._renderRange.bind(this);
+    this._renderText = this._renderText.bind(this);
+    this.autobindMe = this.autobindMe.bind(this);
+    props.foo();
 
-  getInitialState: function() {
-    this.props.foo();
-    return {
+    this.state = {
       heyoo: 23,
     };
-  },
+  }
 
-  _renderText: function(text) {
+  _renderText(text) {
     return <Text text={text} />;
-  },
+  }
 
-  _renderImageRange: function(text, range) {
+  _renderImageRange(text, range) {
     var image = range.image;
     if (image) {
       return (
@@ -76,13 +66,14 @@ var MyComponent3 = React.createClass({
         />
       );
     }
-  },
+    return null;
+  }
 
-  autobindMe: function() {},
-  dontAutobindMe: function() {},
+  autobindMe() {}
+  dontAutobindMe() {}
 
   // Function comment
-  _renderRange: function(text, range) {
+  _renderRange(text, range) {
     var self = this;
 
     self.dontAutobindMe();
@@ -105,10 +96,10 @@ var MyComponent3 = React.createClass({
     }
 
     return text;
-  },
+  }
 
   /* This is a comment */
-  render: function() {
+  render() {
     var content = this.props.text;
     return (
       <BaseText
@@ -118,8 +109,29 @@ var MyComponent3 = React.createClass({
         text={content.text}
       />
     );
-  },
-});
+  }
+}
+
+MyComponent3.defaultProps = function() {
+  foo();
+  return {
+    linkifyEntities: true,
+    highlightEntities: false,
+  };
+}();
+
+MyComponent3.foo = function() {};
+
+MyComponent3.propTypes = {
+  highlightEntities: React.PropTypes.bool,
+  linkifyEntities: React.PropTypes.bool,
+  text: React.PropTypes.shape({
+    text: React.PropTypes.string,
+    ranges: React.PropTypes.array,
+  }).isRequired,
+};
+
+MyComponent3.someThing = 10;
 
 var MyComponent4 = React.createClass({
   foo: callMeMaybe(),
