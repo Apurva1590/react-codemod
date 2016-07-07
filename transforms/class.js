@@ -291,23 +291,37 @@ module.exports = (file, api, options) => {
       return [];
     }
 
-    return getInitialState.value.body.body.map(statement => {
-      if (statement.type === 'ReturnStatement') {
-        return j.expressionStatement(
-          j.assignmentExpression(
-            '=',
-            j.memberExpression(
-              j.thisExpression(),
-              j.identifier('state'),
-              false
-            ),
-            statement.argument
-          )
-        );
-      }
+    if (getInitialState.value.body.body) {
+      return getInitialState.value.body.body.map(statement => {
+        if (statement.type === 'ReturnStatement') {
+          return j.expressionStatement(
+            j.assignmentExpression(
+              '=',
+              j.memberExpression(
+                j.thisExpression(),
+                j.identifier('state'),
+                false
+              ),
+              statement.argument
+            )
+          );
+        }
 
-      return statement;
-    });
+        return statement;
+      });
+    } else if (getInitialState.value.body.type === 'ObjectExpression') {
+      return j.expressionStatement(
+        j.assignmentExpression(
+          '=',
+          j.memberExpression(
+            j.thisExpression(),
+            j.identifier('state'),
+            false
+          ),
+          getInitialState.value.body
+        )
+      );
+    }
   };
 
   const createConstructorArgs = (hasPropsAccess) => {
